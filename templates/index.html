@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabelBricks</title>
+    <script src="https://cdn.jsdelivr.net/npm/fabric@4.6.0/dist/fabric.min.js"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body onload="initCanvas()">
+    <header class="header">
+        <h1><img src="/static/images/logo-small.png" alt="LabelBricks Logo" class="logo">LabelBricks</h1>
+    </header>
+    <br>
+    <div class="container">
+        <div class="file-list">
+            <h3>Images to Review</h3>
+            <ul>
+                {% for file in files %}
+                <li onclick="fetchImageFromCloud('{{ file }}')">{{ file.split('/')[-1] }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="annotation-area">
+            <br>
+            <button id="toggle-drawing">Enable Drawing</button>
+            <br>
+            <canvas id="canvas"></canvas>
+            <br>
+            <p id="volumePath">{{ volumePath }}</p>
+            <!-- for future
+            <textarea id="description" placeholder="Write a description..."></textarea>
+            <br>--->
+            <button id="save">Save Annotations</button>
+            <br>
+            <form action="/" method="GET">
+                <button type="submit">Choose Different Volume</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

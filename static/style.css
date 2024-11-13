@@ -1,0 +1,124 @@
+body {
+    font-family: 'Inter', sans-serif; 
+    background-color: #1e1e2f; 
+    color: #ffffff; 
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    text-align: center;
+    padding: 20px;
+    background-color: #1a1a1a;
+    border-bottom: 2px solid #444;
+}
+
+.logo {
+    max-height: 50px;
+    vertical-align: middle;
+}
+
+.container {
+    display: flex;
+    background-color: #111;
+    border-radius: 20px;
+    padding: 20px;
+    max-width: 100%;
+    width: 90%;
+    margin: 20px auto 0 auto; 
+    overflow: hidden;
+    flex-wrap: nowrap;
+}
+
+.file-list {
+    width: 220px;
+    margin-right: 20px;
+    border-right: 1px solid #3a3a4f;
+    padding-right: 20px;
+}
+
+.file-list h3 {
+    font-size: 18px;
+    margin-bottom: 10px;
+    color: #ff5a5f; 
+}
+
+.file-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.file-list li {
+    margin-bottom: 8px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    background-color: #33334d; 
+    color: #c2c2d6; 
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.file-list li:hover {
+    background-color: #444466;
+    color: #ffffff;
+}
+.annotation-area {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: calc(100% - 240px);
+}
+canvas {
+    border: 1px solid #ccc;
+    margin-bottom: 10px;
+    max-width: 100%;
+    height: auto;
+}
+textarea {
+    width: 80%;
+    margin-bottom: 10px;
+    max-width: 100%;
+}
+/* Buttons */
+button {
+    padding: 10px 15px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #ffffff;
+    background-color: #ff5a5f;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #ff7a80;
+}
+
+button#toggle-drawing {
+    background-color: #007acc; 
+}
+
+button#toggle-drawing:hover {
+    background-color: #3b9ee7;
+}
+
+.form-container {
+    font-family: 'Inter', sans-serif; 
+    background-color: #1e1e2f; 
+    color: #ffffff; 
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}

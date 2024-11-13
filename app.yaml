@@ -1,0 +1,11 @@
+command:
+  - gunicorn
+  - app:app
+  - -w
+  - 4
+
+env:
+  - name: DATABRICKS_TOKEN_VALUE
+    valueFrom: "personal-access-token"
+  - name: FULL_DATABRICKS_HOST
+    valueFrom: "full-databricks-host"

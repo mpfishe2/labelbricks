@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabelBricks</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="header">
+        <h1><img src="/static/images/logo-small.png" alt="LabelBricks Logo" class="logo">LabelBricks</h1>
+    </header>
+    <div class="form-container">
+        <form action="/render_image_annotator" method="POST">
+            <label for="catalog_name">Catalog Name:</label>
+            <input type="text" id="catalog_name" name="catalog_name" required>
+            <br>
+            <br>
+            <label for="schema_name">Schema Name:</label>
+            <input type="text" id="schema_name" name="schema_name" required>
+            <br>
+            <br>
+            <label for="volume_name">Volume Name:</label>
+            <input type="text" id="volume_name" name="volume_name" required>
+            <br>
+            <br>
+            <label for="img_dir_path">Images Directory Path:</label>
+            <input type="text" id="img_dir_path" name="img_dir_path" required>
+            <br>
+            <br>
+            <button type="submit">Submit</button>
+        </form>
+    </div>
+</body>
+</html>
