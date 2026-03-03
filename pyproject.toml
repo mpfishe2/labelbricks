@@ -1,0 +1,14 @@
+[project]
+name = "labelbricks"
+version = "0.1.0"
+description = "Image annotation tool for Databricks Apps with AI-assisted labeling"
+requires-python = ">=3.11"
+dependencies = [
+    "databricks-sdk>=0.36.0",
+    "Flask>=3.0.3",
+    "Pillow>=11.0.0",
+    "gunicorn>=23.0.0",
+]
+
+[project.scripts]
+dev = "flask:run"

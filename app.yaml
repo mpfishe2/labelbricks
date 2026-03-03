@@ -5,7 +5,5 @@ command:
   - 4
 
 env:
-  - name: DATABRICKS_TOKEN_VALUE
-    valueFrom: "personal-access-token"
-  - name: FULL_DATABRICKS_HOST
-    valueFrom: "full-databricks-host"
+  - name: VOLUME_PATH
+    valueFrom: labelbricks-volume
