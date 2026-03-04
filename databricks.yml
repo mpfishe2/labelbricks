@@ -29,6 +29,14 @@ targets:
     mode: development
     workspace:
       profile: e2-demo-field-eng
+  fevm:
+    mode: development
+    workspace:
+      profile: fevm-labelbricks-test
+    variables:
+      catalog: "labelbricks_test_catalog"
+      schema: "default"
+      volume: "images"
   prod:
     mode: production
     workspace:
