@@ -1,7 +1,11 @@
 .env
 /bin
 /lib
-**__pycache__**
+__pycache__/
 pyvenv.cfg
 .databricks
 .claude
+.venv/
+.python-version
+uv.lock
+static/temp_images/

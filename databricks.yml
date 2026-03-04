@@ -1,0 +1,35 @@
+bundle:
+  name: labelbricks
+
+variables:
+  catalog:
+    description: "Unity Catalog name"
+  schema:
+    description: "Schema name"
+    default: "default"
+  volume:
+    description: "Volume name for image storage"
+
+resources:
+  apps:
+    labelbricks:
+      name: "labelbricks-${bundle.target}"
+      description: "Image annotation tool with AI-assisted labeling"
+      source_code_path: .
+      resources:
+        - name: "labelbricks-volume"
+          uc_securable:
+            securable_type: "VOLUME"
+            securable_full_name: "${var.catalog}.${var.schema}.${var.volume}"
+            permission: "WRITE_VOLUME"
+
+targets:
+  dev:
+    default: true
+    mode: development
+    workspace:
+      profile: e2-demo-field-eng
+  prod:
+    mode: production
+    workspace:
+      profile: e2-demo-field-eng
