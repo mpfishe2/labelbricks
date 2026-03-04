@@ -33,11 +33,24 @@ export class Sidebar {
     }, { root: this.queueEl, rootMargin: '100px' });
   }
 
-  setFiles(files) {
+  async setFiles(files, volumePath) {
     this.files = files;
     files.forEach(f => {
       if (!this.statuses[f]) this.statuses[f] = 'pending';
     });
+
+    // Fetch persisted statuses from Lakebase
+    if (volumePath) {
+      try {
+        const dbStatuses = await API.getImageStatuses(volumePath, files);
+        Object.entries(dbStatuses).forEach(([path, status]) => {
+          this.statuses[path] = status;
+        });
+      } catch (e) {
+        console.warn('Failed to load image statuses from DB:', e);
+      }
+    }
+
     this.render();
   }
 

@@ -1,3 +1,5 @@
+import API from './api-client.js';
+
 const STORAGE_KEY = 'labelbricks-label-classes';
 const COLOR_PALETTE = [
   '#FF3621', '#3B82F6', '#00A972', '#F59E0B', '#8B5CF6',
@@ -16,19 +18,36 @@ export class LabelManager {
     this.recentClasses = this._loadRecent();
     this._colorIndex = 0;
     this.onClassChange = null;
+    this._suggestionsEl = null;
+    this._searchTimeout = null;
   }
 
   init() {
     this.inputEl?.addEventListener('input', (e) => {
       this.currentClass = e.target.value.trim();
+      this._debouncedSearch(this.currentClass);
     });
 
     this.inputEl?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && this.currentClass) {
         e.preventDefault();
         this._addToRecent(this.currentClass);
+        this._hideAutocomplete();
       }
     });
+
+    this.inputEl?.addEventListener('blur', () => {
+      // Delay hide so click events on suggestions register
+      setTimeout(() => this._hideAutocomplete(), 150);
+    });
+
+    // Add autocomplete dropdown
+    if (this.inputEl?.parentNode) {
+      this._suggestionsEl = document.createElement('div');
+      this._suggestionsEl.className = 'label-autocomplete hidden';
+      this.inputEl.parentNode.style.position = 'relative';
+      this.inputEl.parentNode.appendChild(this._suggestionsEl);
+    }
 
     // Restore colors for recent classes
     this.recentClasses.forEach(cls => this.getColorForClass(cls));
@@ -93,5 +112,48 @@ export class LabelManager {
 
   _saveRecent() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(this.recentClasses));
+  }
+
+  _debouncedSearch(prefix) {
+    clearTimeout(this._searchTimeout);
+    if (!prefix || prefix.length < 1) {
+      this._hideAutocomplete();
+      return;
+    }
+    this._searchTimeout = setTimeout(async () => {
+      try {
+        const results = await API.getLabelClasses(prefix);
+        this._renderAutocomplete(results);
+      } catch {
+        this._hideAutocomplete();
+      }
+    }, 200);
+  }
+
+  _renderAutocomplete(results) {
+    if (!this._suggestionsEl) return;
+    // Filter out labels already in recent chips
+    const filtered = results.filter(r => !this.recentClasses.includes(r.class_name));
+    if (filtered.length === 0) {
+      this._hideAutocomplete();
+      return;
+    }
+    this._suggestionsEl.innerHTML = '';
+    filtered.forEach(r => {
+      const item = document.createElement('div');
+      item.className = 'autocomplete-item';
+      item.textContent = `${r.class_name} (${r.usage_count})`;
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        this.setClass(r.class_name);
+        this._hideAutocomplete();
+      });
+      this._suggestionsEl.appendChild(item);
+    });
+    this._suggestionsEl.classList.remove('hidden');
+  }
+
+  _hideAutocomplete() {
+    this._suggestionsEl?.classList.add('hidden');
   }
 }

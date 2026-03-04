@@ -88,11 +88,23 @@ class LabelBricksApp {
   }
 
   /** Called by VolumeBrowser when user selects a volume. */
-  onVolumeSelected(files, volumePath) {
+  async onVolumeSelected(files, volumePath) {
     this.currentFiles = files;
     this.currentIndex = -1;
     if (volumePath) this.volumePath = volumePath;
-    this.sidebar.setFiles(files);
+
+    // Trigger JSON-to-Lakebase migration in background (idempotent)
+    if (volumePath) {
+      API.migrateJson(volumePath).then(r => {
+        if (r.migrated > 0) {
+          this.showToast(`Imported ${r.migrated} existing annotation(s)`);
+        }
+      }).catch(() => {}); // Silent on failure
+    }
+
+    // Pass volumePath to sidebar for DB status loading
+    await this.sidebar.setFiles(files, volumePath);
+
     if (files.length > 0) {
       this.loadImageByIndex(0);
     }
