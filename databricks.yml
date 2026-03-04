@@ -12,6 +12,9 @@ variables:
   vision_model_endpoint:
     description: "FMAPI serving endpoint for AI suggestions"
     default: "databricks-claude-sonnet-4-5"
+  app_sp_client_id:
+    description: "Client ID of the app service principal (for Lakebase role setup)"
+    default: ""
 
 resources:
   apps:
@@ -25,6 +28,11 @@ resources:
             securable_type: "VOLUME"
             securable_full_name: "${var.catalog}.${var.schema}.${var.volume}"
             permission: "WRITE_VOLUME"
+
+  # NOTE: Lakebase Autoscaling resources (project, branch, endpoint) are
+  # provisioned via the Databricks SDK — DABs does not yet support
+  # postgres_projects/postgres_branches/postgres_endpoints resource types.
+  # See scripts/bootstrap_lakebase.py for the one-time setup procedure.
 
 targets:
   dev:

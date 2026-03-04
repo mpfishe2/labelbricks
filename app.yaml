@@ -9,3 +9,15 @@ env:
     valueFrom: labelbricks-volume
   - name: VISION_MODEL_ENDPOINT
     value: databricks-claude-sonnet-4-5
+  - name: PGHOST
+    value: ep-floral-scene-d2ku4pne.database.us-east-1.cloud.databricks.com
+  - name: PGDATABASE
+    value: databricks_postgres
+  - name: PGUSER
+    value: ac4aa0d7-1246-4e9e-8878-db1cdda73cc0
+  - name: PGPORT
+    value: "5432"
+  - name: PGSSLMODE
+    value: require
+  - name: LAKEBASE_ENDPOINT
+    value: projects/labelbricks-fevm/branches/production/endpoints/primary

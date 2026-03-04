@@ -10,6 +10,9 @@ from flask import Flask, Response, jsonify, render_template, request, session
 from PIL import Image
 
 from libraries.volumes import VolumeClient
+from libraries.db import is_available as lakebase_available
+from libraries.schema import ensure_schema
+from libraries.storage import LakebaseStorage
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +26,25 @@ w = WorkspaceClient()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24).hex())
+
+# Lakebase storage singleton (lazy init)
+_storage: LakebaseStorage | None = None
+_storage_checked = False
+
+
+def get_storage() -> LakebaseStorage | None:
+    """Get the Lakebase storage singleton, or None if not configured."""
+    global _storage, _storage_checked
+    if _storage is not None:
+        return _storage
+    if _storage_checked:
+        return None
+    _storage_checked = True
+    if lakebase_available():
+        ensure_schema()
+        _storage = LakebaseStorage()
+        logger.info("Lakebase storage initialized")
+    return _storage
 
 
 _local_user_info: dict[str, str] | None = None
@@ -290,10 +312,33 @@ def api_save():
         "annotations": annotations,
     }
 
-    # Ensure .labelbricks directories exist
+    # ---- Save to Lakebase (if available) ----
+    storage = get_storage()
+    lakebase_result = None
+
+    if storage:
+        try:
+            lakebase_result = storage.save_annotations(
+                volume_path=volume_path,
+                file_path=file_path,
+                filename=filename,
+                annotations=annotations,
+                status=status,
+                notes=notes,
+                reviewer_email=user_info["user_email"],
+            )
+            storage.log_action(
+                image_id=lakebase_result["image_id"],
+                action="save",
+                actor_email=user_info["user_email"],
+                details={"annotation_count": len(annotations), "status": status},
+            )
+        except Exception:
+            logger.exception("Lakebase save failed, falling back to JSON only")
+
+    # ---- Always save JSON to Volume (backup / backward compat) ----
     _ensure_volume_dirs(volume_path)
 
-    # Save JSON to .labelbricks/annotations/{filename}.json
     json_path = f"{volume_path}/.labelbricks/annotations/{filename}.json"
     json_bytes = json.dumps(annotation_data, indent=2).encode("utf-8")
 
@@ -301,7 +346,8 @@ def api_save():
         w.files.upload(json_path, BytesIO(json_bytes), overwrite=True)
     except Exception:
         logger.exception("Failed to save annotation JSON: %s", json_path)
-        return jsonify({"error": "Failed to save annotations"}), 500
+        if not lakebase_result:
+            return jsonify({"error": "Failed to save annotations"}), 500
 
     # Save composite PNG if provided
     if composite_png_b64:
@@ -311,9 +357,12 @@ def api_save():
             w.files.upload(png_path, BytesIO(png_data), overwrite=True)
         except Exception:
             logger.exception("Failed to save composite PNG")
-            # Non-fatal: JSON was saved successfully
 
-    return jsonify({"status": "success", "annotation_path": json_path})
+    return jsonify({
+        "status": "success",
+        "annotation_path": json_path,
+        "storage": "lakebase" if lakebase_result else "json",
+    })
 
 
 @app.route("/api/ai-suggest", methods=["POST"])
@@ -356,24 +405,95 @@ def api_ai_suggest():
 
 @app.route("/api/annotations")
 def api_annotations():
-    """Load existing annotations for a file."""
+    """Load existing annotations for a file. Tries Lakebase first, falls back to JSON."""
     file_path = request.args.get("file_path")
     if not file_path:
         return jsonify({"error": "file_path required"}), 400
 
-    filename = file_path.rsplit("/", 1)[-1]
     volume_path = request.args.get("volume_path") or session.get("volume_path")
     if not volume_path:
         return jsonify(None)
 
+    # Try Lakebase first
+    storage = get_storage()
+    if storage:
+        try:
+            result = storage.load_annotations(volume_path, file_path)
+            if result:
+                return jsonify(result)
+        except Exception:
+            logger.exception("Lakebase load failed, falling back to JSON")
+
+    # Fall back to Volume JSON
+    filename = file_path.rsplit("/", 1)[-1]
     json_path = f"{volume_path}/.labelbricks/annotations/{filename}.json"
 
     try:
         data = w.files.download(json_path).contents.read()
         return Response(data, mimetype="application/json")
     except Exception:
-        # No existing annotations — that's fine
         return jsonify(None)
+
+
+# ---- Lakebase-Powered Endpoints ----
+
+
+@app.route("/api/label-classes")
+def api_label_classes():
+    """Search label classes for autocomplete."""
+    prefix = request.args.get("q", "")
+    limit = int(request.args.get("limit", "20"))
+
+    storage = get_storage()
+    if not storage:
+        return jsonify([])
+
+    try:
+        results = storage.search_labels(prefix, limit)
+        return jsonify(results)
+    except Exception:
+        logger.exception("Label search failed")
+        return jsonify([])
+
+
+@app.route("/api/image-statuses", methods=["POST"])
+def api_image_statuses():
+    """Bulk fetch statuses for images in a volume."""
+    data = request.get_json()
+    volume_path = data.get("volumePath")
+    file_paths = data.get("filePaths", [])
+
+    storage = get_storage()
+    if not storage:
+        return jsonify({})
+
+    try:
+        statuses = storage.get_image_statuses(volume_path, file_paths)
+        return jsonify(statuses)
+    except Exception:
+        logger.exception("Failed to fetch image statuses")
+        return jsonify({})
+
+
+@app.route("/api/migrate-json", methods=["POST"])
+def api_migrate_json():
+    """Migrate existing JSON annotations into Lakebase."""
+    from libraries.migration import migrate_volume_json
+
+    data = request.get_json()
+    volume_path = data.get("volumePath")
+    user_info = get_user_info()
+
+    storage = get_storage()
+    if not storage:
+        return jsonify({"migrated": 0, "message": "Lakebase not available"})
+
+    try:
+        count = migrate_volume_json(w, storage, volume_path, user_info["user_email"])
+        return jsonify({"migrated": count})
+    except Exception:
+        logger.exception("JSON migration failed")
+        return jsonify({"error": "Migration failed"}), 500
 
 
 if __name__ == "__main__":

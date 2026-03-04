@@ -26,7 +26,7 @@ Check for plugins here: `.claude/settings.json`
 - **Backend**: Python / Flask (served via Gunicorn)
 - **Frontend**: Vanilla JS with Fabric.js (canvas-based annotation)
 - **Platform**: Databricks Apps (serverless containerized deployment)
-- **Storage**: Unity Catalog Volumes (image I/O)
+- **Storage**: Unity Catalog Volumes (image I/O) + Lakebase Autoscaling PostgreSQL (annotation metadata)
 - **AI**: Databricks Foundation Model APIs via `databricks-openai` (Claude Sonnet vision model for AI-assisted labeling)
 - **Auth**: Databricks OAuth 2.0 / SSO (via app service principal + user authorization)
 - **Config**: `databricks.yml` manifest (Databricks Asset Bundles) + `app.yaml` runtime config
@@ -47,7 +47,13 @@ labelbricks/
 ├── template.env.txt              # Reference doc — no .env file needed
 ├── libraries/
 │   ├── volumes.py                # VolumeClient - UC Volume file operations
-│   └── ai_client.py              # FMAPI vision client — image → bounding box suggestions
+│   ├── ai_client.py              # FMAPI vision client — image → bounding box suggestions
+│   ├── db.py                     # Lakebase connection pool + OAuth token rotation
+│   ├── schema.py                 # DDL for 4 tables + idempotent ensure_schema()
+│   ├── storage.py                # LakebaseStorage — CRUD for images, annotations, labels, audit
+│   └── migration.py              # JSON-to-Lakebase migration (idempotent)
+├── scripts/
+│   └── bootstrap_lakebase.py     # One-time Postgres role setup for app SP
 ├── templates/
 │   ├── index.html                # Main annotation UI (three-panel Fabric.js canvas)
 │   └── set_volume.html           # Styled landing page
@@ -124,7 +130,7 @@ See `PROJECT_PLAN.md` for the full 4-phase plan. See `PROGRESS.md` for current s
 
 **Phase 3 (COMPLETE):** AI-assisted labeling — FMAPI vision model integration via `databricks-openai`, on-demand AI Suggest button, dashed blue overlays with confidence scores, accept/edit/reject workflow, confidence threshold slider, custom prompt support, server-side image compression for large files.
 
-**Phase 4:** Structured storage — Lakebase (PostgreSQL) for annotation metadata, cross-session persistence, label autocomplete.
+**Phase 4 (COMPLETE):** Structured storage — Lakebase Autoscaling PostgreSQL for annotation metadata, cross-session persistence, label autocomplete from DB, audit logging. Dual-write (Lakebase + JSON backup). Graceful fallback to JSON when Lakebase not configured.
 
 ## Code Style
 
@@ -134,7 +140,7 @@ See `PROJECT_PLAN.md` for the full 4-phase plan. See `PROGRESS.md` for current s
 - Error handling: Always wrap Databricks SDK calls in try/except. Log the error and return a user-friendly message. Never expose stack traces to the frontend.
 - Environment detection: Use `IS_DEPLOYED = os.getenv("DATABRICKS_APP_NAME") is not None`. Do not check for .env file existence.
 
-## Current Patterns (Post Phase 3)
+## Current Patterns (Post Phase 4)
 
 - `WorkspaceClient()` is initialized once globally — auto-detects CLI profile (local) or SP OAuth (deployed).
 - `get_user_info()` returns user identity from `X-Forwarded-*` headers (deployed) or `w.current_user.me()` (local, cached after first call).
@@ -150,6 +156,16 @@ See `PROJECT_PLAN.md` for the full 4-phase plan. See `PROGRESS.md` for current s
 - **`DatabricksOpenAI()` for FMAPI calls** — auto-detects credentials the same way `WorkspaceClient()` does. Used in `libraries/ai_client.py` for vision model calls.
 - **AI bounding boxes use percentage coordinates (0-100).** Frontend translates to canvas pixels: `canvas_x = (pct / 100) * naturalWidth * canvasManager.getScale()`.
 - **Large images auto-compressed** before FMAPI calls. `_compress_image()` in `ai_client.py` uses Pillow to progressively resize/compress images >2.5MB to stay under the 4MB FMAPI request limit.
+- **Lakebase dual-write pattern**: `POST /api/save` writes to Lakebase first, then JSON to Volume as backup. `GET /api/annotations` reads from Lakebase first, falls back to JSON. If Lakebase is not configured (`PGHOST` unset), all DB codepaths return None/empty gracefully.
+- **`get_storage()` is a lazy singleton** in `app.py`. First call checks `lakebase_available()`, runs `ensure_schema()`, and creates `LakebaseStorage()`. Returns None if not configured. Subsequent calls return cached result.
+- **psycopg3 (not psycopg2)** is required for the `ConnectionPool` + `OAuthConnection` pattern. The `psycopg` package provides `psycopg.Connection` subclassing and `psycopg_pool.ConnectionPool` with `connection_class` parameter.
+- **`OAuthConnection.connect()` calls `w.postgres.generate_database_credential()`** to inject a fresh OAuth token as the password on each new connection. Token rotation is automatic.
+- **4 Lakebase tables**: `images` (status + metadata, UNIQUE on volume_path+file_path), `annotations` (per-shape, FK to images, JSONB coordinates), `label_classes` (usage_count for autocomplete, `text_pattern_ops` index), `audit_log` (fire-and-forget action history).
+- **`save_annotations()` does delete-then-insert** for annotation rows (simpler than diffing). Image row is upserted via `ON CONFLICT DO UPDATE`.
+- **`load_annotations()` returns the same JSON shape** as the Volume JSON format — zero frontend deserialization changes needed.
+- **Label autocomplete**: `LabelManager` has a debounced 200ms search that queries `GET /api/label-classes?q=prefix`. Results appear in a dropdown below the input. localStorage recent chips remain as the fast-path.
+- **JSON-to-Lakebase migration** runs automatically on volume open (fire-and-forget from `app.js`). Toast shows "Imported N annotation(s)" on success. Idempotent — skips images already in DB.
+- **Sidebar loads statuses from DB** via `POST /api/image-statuses` on volume open, merging into the in-memory status Map.
 
 ## Lessons Learned
 
@@ -167,3 +183,11 @@ See `PROJECT_PLAN.md` for the full 4-phase plan. See `PROGRESS.md` for current s
 - **Use `excludeFromExport = true` on temporary Fabric.js objects** (like AI suggestion overlays) to keep them out of `canvas.toJSON()` and the undo snapshot stack. This is cleaner than filtering them out in the undo manager.
 - **Vision models return bboxes reliably with explicit format instructions.** Include a concrete JSON example in the prompt and request "no markdown, no explanation." Temperature 0.1 improves consistency. Still handle markdown code fences in parsing as a fallback.
 - **Percentage-based coordinates are resolution-independent.** When the AI returns bboxes as 0-100% of image dimensions, the frontend handles all display scaling via `canvasManager.getScale()` and natural image dimensions. This decouples model output from canvas/display size.
+- **DABs does not yet support Lakebase resource types.** `postgres_projects`, `postgres_branches`, `postgres_endpoints` are not recognized by `databricks bundle validate`. Provision Lakebase via the Python SDK (`w.postgres.create_project()`) or the MCP tool, not via `databricks.yml`.
+- **Lakebase Autoscaling project creation**: Use `w.postgres.create_project(project=Project(spec=ProjectSpec(display_name=..., pg_version=17)), project_id='...')`. The operation returns a `CreateProjectOperation` — call `.wait()` (not `.result()`). A production branch + primary endpoint are auto-created.
+- **Lakebase role bootstrap is a chicken-and-egg problem.** The app SP can't grant itself permissions. The project owner (deployer) must run `CREATE EXTENSION IF NOT EXISTS databricks_auth; SELECT databricks_create_role('<SP_CLIENT_ID>', 'SERVICE_PRINCIPAL')` + GRANT statements. Use `scripts/bootstrap_lakebase.py` for this.
+- **`psycopg.errors.DuplicateObject`** is the exception when a Postgres role already exists. Catch it specifically for idempotent role creation.
+- **Lakebase endpoint hostname** is found at `endpoint.status.hosts.host` after calling `w.postgres.list_endpoints()`. Format: `ep-<name>.database.<region>.cloud.databricks.com`.
+- **App SP client ID** is in `service_principal_client_id` field from `databricks apps get <app-name>`. It's a UUID like `ac4aa0d7-1246-4e9e-8878-db1cdda73cc0`. This is also the `PGUSER` value.
+- **Lakebase connection pool sizing**: `min_size=1, max_size=5` works well with 4 Gunicorn workers. Each worker gets one connection; the extra is a spare for concurrent requests.
+- **`ensure_schema()` is safe to call on every app restart.** All DDL uses `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS`. A module-level `_schema_initialized` flag prevents redundant calls within a single process.

@@ -64,6 +64,34 @@ const API = {
     return res.json();
   },
 
+  async getLabelClasses(prefix = '', limit = 20) {
+    const res = await fetch(
+      `/api/label-classes?q=${encodeURIComponent(prefix)}&limit=${limit}`
+    );
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async getImageStatuses(volumePath, filePaths) {
+    const res = await fetch('/api/image-statuses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ volumePath, filePaths }),
+    });
+    if (!res.ok) return {};
+    return res.json();
+  },
+
+  async migrateJson(volumePath) {
+    const res = await fetch('/api/migrate-json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ volumePath }),
+    });
+    if (!res.ok) return { migrated: 0 };
+    return res.json();
+  },
+
   async getAISuggestions({ filePath, prompt }) {
     const res = await fetch('/api/ai-suggest', {
       method: 'POST',

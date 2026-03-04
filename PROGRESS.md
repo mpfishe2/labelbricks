@@ -207,6 +207,81 @@ After deploying Phase 2, live user testing on the FEVM Databricks App revealed t
 - Image navigation: clears all suggestions
 - No JavaScript console errors
 
-## Phase 4: Structured Storage + Lakebase - NOT STARTED
+## Phase 4: Structured Storage + Lakebase Autoscaling - COMPLETE
 
-See `PROJECT_PLAN.md` section "Phase 4" for full details.
+**Date completed:** March 4, 2026
+**Branch:** `feature/ai-assisted-labeling`
+**Status:** Deployed to FEVM workspace and verified with Lakebase Autoscaling
+
+### What Changed
+
+| File | Action | Summary |
+|------|--------|---------|
+| `libraries/db.py` | CREATED | Lakebase connection pool with OAuth token rotation via psycopg3. `OAuthConnection` subclass calls `w.postgres.generate_database_credential()`. Global `ConnectionPool` singleton (min=1, max=5). Returns None gracefully when Lakebase not configured. |
+| `libraries/schema.py` | CREATED | Idempotent DDL for 4 tables: `images`, `annotations`, `label_classes`, `audit_log`. `ensure_schema()` runs `CREATE TABLE IF NOT EXISTS` on first use. |
+| `libraries/storage.py` | CREATED | `LakebaseStorage` class with direct psycopg3 queries. Methods: `save_annotations()` (upsert image + delete-insert annotations), `load_annotations()` (returns same JSON shape as Volume format), `get_image_statuses()` (bulk), `search_labels()` (prefix autocomplete), `log_action()` (fire-and-forget audit). |
+| `libraries/migration.py` | CREATED | `migrate_volume_json()` scans `.labelbricks/annotations/*.json`, imports into Lakebase. Idempotent — skips existing. Does not delete JSON files. |
+| `scripts/bootstrap_lakebase.py` | CREATED | One-time DABs job script for Postgres role setup. Creates `databricks_auth` extension, app SP role, and grants. Idempotent. |
+| `app.py` | MODIFIED | Dual-write save (Lakebase + JSON backup). Lakebase-first annotation loading with JSON fallback. Three new endpoints: `GET /api/label-classes`, `POST /api/image-statuses`, `POST /api/migrate-json`. Lazy `get_storage()` singleton. |
+| `databricks.yml` | MODIFIED | Added `app_sp_client_id` variable. Note: Lakebase resources not yet supported by DABs — provisioned via SDK instead. |
+| `app.yaml` | MODIFIED | Added `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPORT`, `PGSSLMODE`, `LAKEBASE_ENDPOINT` env vars for Lakebase connection. |
+| `pyproject.toml` | MODIFIED | Added `psycopg[binary,pool]>=3.1.0`, bumped `databricks-sdk>=0.81.0` |
+| `requirements.txt` | MODIFIED | Same dependency additions |
+| `static/js/api-client.js` | MODIFIED | Added `getLabelClasses()`, `getImageStatuses()`, `migrateJson()` API methods |
+| `static/js/label-manager.js` | MODIFIED | Added debounced autocomplete dropdown from database. Queries `/api/label-classes` on input, renders dropdown with usage counts. Keeps localStorage recent chips as fast path. |
+| `static/js/sidebar.js` | MODIFIED | `setFiles()` now async — fetches persisted statuses from `/api/image-statuses` on volume open |
+| `static/js/app.js` | MODIFIED | `onVolumeSelected()` triggers background JSON migration and passes `volumePath` to sidebar for DB status loading |
+| `static/style.css` | MODIFIED | Added `.label-autocomplete` dropdown styles |
+
+### Key Architectural Decisions Made
+
+1. **Lakebase Autoscaling** (not Provisioned or Delta tables). Scale-to-zero, branching, copy-on-write storage. PostgreSQL 17.
+2. **Dual-write pattern**: Save to Lakebase first, then JSON to Volume as backup. Load from Lakebase first, fall back to JSON.
+3. **No Delta table fallback**: Lakebase or JSON. Simpler codebase, no `StorageBackend` ABC.
+4. **psycopg3 (not psycopg2)**: Required for `ConnectionPool` with custom `connection_class` for OAuth token rotation.
+5. **Same JSON shape**: `load_annotations()` returns identical structure to Volume JSON, so frontend deserialization is unchanged.
+6. **Fire-and-forget migration**: JSON-to-DB migration runs in background on volume open. Toast notification on success.
+7. **Audit log is non-blocking**: Wrapped in try/except, never breaks the main save flow.
+8. **Lakebase provisioned via SDK**: DABs does not yet support `postgres_projects`/`postgres_branches`/`postgres_endpoints`. Use `w.postgres.create_project()` or the MCP `create_or_update_lakebase_database` tool instead.
+9. **Bootstrap script for role setup**: `scripts/bootstrap_lakebase.py` is run standalone (not as a DABs job) to create the app SP role and grants. Idempotent.
+
+### Deployment Details
+
+- **Lakebase project**: `labelbricks-fevm` (PostgreSQL 17, Autoscaling)
+- **Endpoint**: `ep-floral-scene-d2ku4pne.database.us-east-1.cloud.databricks.com`
+- **Branch**: `production` (READY, no-expiry)
+- **App SP client ID**: `ac4aa0d7-1246-4e9e-8878-db1cdda73cc0`
+
+### Deployment Workflow
+
+```bash
+# 1. Provision Lakebase (one-time, via SDK — see scripts/bootstrap_lakebase.py)
+# Project labelbricks-fevm already created with production branch + primary endpoint
+
+# 2. Run bootstrap script (one-time role setup)
+DATABRICKS_CONFIG_PROFILE=fevm-labelbricks-test \
+PGHOST=ep-floral-scene-d2ku4pne.database.us-east-1.cloud.databricks.com \
+PGDATABASE=databricks_postgres PGUSER=max.fisher@databricks.com PGPORT=5432 PGSSLMODE=require \
+LAKEBASE_ENDPOINT=projects/labelbricks-fevm/branches/production/endpoints/primary \
+uv run python scripts/bootstrap_lakebase.py \
+  --app-sp-client-id ac4aa0d7-1246-4e9e-8878-db1cdda73cc0 \
+  --endpoint projects/labelbricks-fevm/branches/production/endpoints/primary
+
+# 3. Deploy bundle + app
+databricks bundle deploy --target fevm
+databricks apps deploy labelbricks-fevm \
+  --source-code-path /Workspace/Users/max.fisher@databricks.com/.bundle/labelbricks/fevm/files \
+  --profile fevm-labelbricks-test
+```
+
+### Verification
+
+- App deployed and started successfully with Lakebase configured
+- All 15 Flask routes registered (including 3 new: `/api/label-classes`, `/api/image-statuses`, `/api/migrate-json`)
+- **JSON fallback mode**: Confirmed working — when `PGHOST` unset, all DB endpoints return empty gracefully, save reports `"storage": "json"`
+- **Lakebase mode**: Confirmed working — save reports `"storage": "lakebase"`, annotations persist across page reloads
+- **JSON-to-DB migration**: 2 existing annotation files automatically imported on first volume open
+- **Label autocomplete**: Typing "dog" returns `[{"class_name":"dog","usage_count":2}]` from database
+- **Status persistence**: Sidebar shows "reviewed" badge loaded from DB after page reload (1/3 progress)
+- **Dual-write**: Both Lakebase and Volume JSON updated on save
+- No JavaScript console errors related to Phase 4 endpoints
