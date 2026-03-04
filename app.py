@@ -316,6 +316,44 @@ def api_save():
     return jsonify({"status": "success", "annotation_path": json_path})
 
 
+@app.route("/api/ai-suggest", methods=["POST"])
+def api_ai_suggest():
+    """Get AI-generated annotation suggestions for an image."""
+    from libraries.ai_client import AIClientError, get_ai_suggestions
+
+    data = request.get_json()
+    file_path = data.get("filePath")
+    custom_prompt = data.get("prompt")
+
+    if not file_path:
+        return jsonify({"error": "filePath required"}), 400
+
+    try:
+        img_bytes = w.files.download(file_path).contents.read()
+    except Exception:
+        logger.exception("Failed to download image for AI suggestion: %s", file_path)
+        return jsonify({"error": "Failed to load image"}), 500
+
+    ext = file_path.rsplit(".", 1)[-1].lower()
+    content_types = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png"}
+    content_type = content_types.get(ext, "image/jpeg")
+
+    try:
+        suggestions = get_ai_suggestions(
+            image_bytes=img_bytes,
+            content_type=content_type,
+            custom_prompt=custom_prompt,
+        )
+        logger.info("AI returned %d suggestions for %s", len(suggestions), file_path)
+        return jsonify({"suggestions": suggestions})
+    except AIClientError as e:
+        logger.warning("AI suggestion failed: %s", e)
+        return jsonify({"error": str(e)}), 502
+    except Exception:
+        logger.exception("Unexpected error in AI suggestion")
+        return jsonify({"error": "AI suggestion failed unexpectedly"}), 500
+
+
 @app.route("/api/annotations")
 def api_annotations():
     """Load existing annotations for a file."""

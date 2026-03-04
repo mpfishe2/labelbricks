@@ -85,6 +85,25 @@
                     <!-- Populated by label-manager.js -->
                 </div>
             </div>
+            <div class="tool-section ai-section">
+                <h4>AI Assist</h4>
+                <button class="btn-ai-suggest" id="btn-ai-suggest">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                    AI Suggest
+                </button>
+                <span class="ai-suggest-count" id="ai-suggest-count"></span>
+                <div class="ai-threshold-row">
+                    <label for="ai-threshold">Min confidence</label>
+                    <input type="range" id="ai-threshold" min="0" max="1" step="0.05" value="0.3" class="ai-threshold-slider">
+                    <span id="ai-threshold-value" class="ai-threshold-val">0.30</span>
+                </div>
+                <div id="ai-prompt-section" class="ai-prompt-section collapsed">
+                    <button class="ai-prompt-toggle" id="ai-prompt-toggle" type="button">Customize prompt...</button>
+                    <textarea id="ai-prompt" class="ai-prompt-input" rows="4" placeholder="Override the default detection prompt..."></textarea>
+                </div>
+            </div>
             <div class="tool-section">
                 <h4>Annotations</h4>
                 <div class="annotation-list" id="annotation-list">

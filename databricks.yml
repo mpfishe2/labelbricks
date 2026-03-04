@@ -9,6 +9,9 @@ variables:
     default: "default"
   volume:
     description: "Volume name for image storage"
+  vision_model_endpoint:
+    description: "FMAPI serving endpoint for AI suggestions"
+    default: "databricks-claude-sonnet-4-5"
 
 resources:
   apps:

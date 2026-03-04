@@ -1,4 +1,5 @@
 databricks-sdk>=0.36.0
+databricks-openai>=0.12.0
 Flask>=3.0.3
 Pillow>=11.0.0
 gunicorn>=23.0.0

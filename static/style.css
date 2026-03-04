@@ -864,6 +864,170 @@ body {
   color: var(--color-text-dark);
 }
 
+/* ---- AI Assist Section ---- */
+.ai-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-ai-suggest {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--color-in-review);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-ai-suggest:hover {
+  background: #2563EB;
+}
+
+.btn-ai-suggest:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.btn-ai-suggest .spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+  border-top-color: white;
+}
+
+.ai-suggest-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.ai-threshold-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.ai-threshold-row label {
+  white-space: nowrap;
+}
+
+.ai-threshold-slider {
+  flex: 1;
+  height: 4px;
+  accent-color: var(--color-in-review);
+}
+
+.ai-threshold-val {
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-prompt-section.collapsed .ai-prompt-input {
+  display: none;
+}
+
+.ai-prompt-toggle {
+  background: none;
+  border: none;
+  color: var(--color-in-review);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family);
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.ai-prompt-toggle:hover {
+  text-decoration: underline;
+}
+
+.ai-prompt-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family);
+  resize: vertical;
+  min-height: 60px;
+  outline: none;
+  background: var(--color-content-bg);
+  color: var(--color-text-dark);
+  box-sizing: border-box;
+}
+
+.ai-prompt-input:focus {
+  border-color: var(--color-in-review);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+/* ---- AI Action Bar (floating) ---- */
+.ai-action-bar {
+  position: absolute;
+  z-index: 50;
+  display: flex;
+  gap: 2px;
+  background: var(--color-content-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+}
+
+.ai-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family);
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.ai-action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ai-action-accept {
+  color: var(--color-done);
+}
+.ai-action-accept:hover {
+  background: rgba(0, 169, 114, 0.1);
+}
+
+.ai-action-edit {
+  color: var(--color-in-review);
+}
+.ai-action-edit:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.ai-action-reject {
+  color: var(--color-primary);
+}
+.ai-action-reject:hover {
+  background: var(--color-primary-light);
+}
+
 /* ---- Utility ---- */
 .hidden { display: none !important; }
 

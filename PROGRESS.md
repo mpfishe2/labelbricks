@@ -162,9 +162,50 @@ After deploying Phase 2, live user testing on the FEVM Databricks App revealed t
 
 ---
 
-## Phase 3: AI-Assisted Labeling - NOT STARTED
+## Phase 3: AI-Assisted Labeling - COMPLETE
 
-See `PROJECT_PLAN.md` section "Phase 3" for full details.
+**Date completed:** March 4, 2026
+**Branch:** `feature/ai-assisted-labeling`
+**Status:** Deployed to FEVM workspace and verified
+
+### What Changed
+
+| File | Action | Summary |
+|------|--------|---------|
+| `libraries/ai_client.py` | CREATED | FMAPI vision client using `DatabricksOpenAI`. Sends base64-encoded images to Claude Sonnet, parses JSON bounding box responses with percentage-based coordinates. Validates/normalizes suggestions. Auto-compresses large images (>2.5MB) via Pillow resize to stay under FMAPI 4MB request limit. |
+| `static/js/ai-suggest.js` | CREATED | `AISuggestManager` class (~320 lines). Manages full AI suggestion lifecycle: button click → loading state → API call → dashed blue overlay rendering → click-to-select → floating Accept/Edit/Reject action bar → confidence threshold slider filtering. Suggestions tracked separately from AnnotationStore (excluded from undo via `excludeFromExport`). |
+| `app.py` | MODIFIED | Added `POST /api/ai-suggest` endpoint. Downloads image bytes from Volume, calls `ai_client.get_ai_suggestions()`, returns structured JSON suggestions. |
+| `static/js/api-client.js` | MODIFIED | Added `getAISuggestions({ filePath, prompt })` method. |
+| `static/js/app.js` | MODIFIED | Imported and instantiated `AISuggestManager`. Clears suggestions on image navigation. |
+| `templates/index.html` | MODIFIED | Added AI Assist section to right toolbar: AI Suggest button, confidence threshold slider (default 0.3), collapsible custom prompt textarea. |
+| `static/style.css` | MODIFIED | Added ~130 lines: AI section styles, button states, threshold slider, prompt toggle, floating action bar with Accept/Edit/Reject button variants. |
+| `requirements.txt` | MODIFIED | Added `databricks-openai>=0.12.0` |
+| `pyproject.toml` | MODIFIED | Added `databricks-openai>=0.12.0` to dependencies |
+| `app.yaml` | MODIFIED | Added `VISION_MODEL_ENDPOINT: databricks-claude-sonnet-4-5` env var |
+| `databricks.yml` | MODIFIED | Added `vision_model_endpoint` variable with default |
+
+### Key Architectural Decisions Made
+
+1. **Manual trigger only**: "AI Suggest" button click — no auto-suggest on image load. Predictable, no surprise API costs.
+2. **Percentage-based coordinates**: AI model returns bboxes as 0-100% of image dimensions. Frontend translates to canvas pixels using `canvasManager.getScale()` and natural image dimensions.
+3. **Suggestions excluded from undo**: `excludeFromExport = true` on Fabric objects keeps undo stack clean. Suggestions tracked in `AISuggestManager._suggestions` array, not in `AnnotationStore`.
+4. **Accept converts to regular annotation**: Changes `strokeDashArray: null`, `selectable: true`, `createdBy: 'ai-accepted'`, adds to `AnnotationStore`. Saved JSON preserves AI origin metadata.
+5. **Server-side image compression**: Images >2.5MB auto-compressed via Pillow resize before base64 encoding. Prevents FMAPI 4MB request limit errors.
+6. **FMAPI pay-per-token endpoints don't need resource declaration**: `databricks-claude-sonnet-4-5` is a workspace-level shared endpoint. No `serving_endpoint` resource needed in `databricks.yml`.
+
+### Verification
+
+- Deployed to FEVM workspace, all routes return 200
+- AI Suggest on small image (logo.png): 3 suggestions returned with correct bboxes
+- AI Suggest on large image (dog_and_cats_four.jpg): 4 suggestions after server-side compression
+- Accept: dashed → solid, appears in annotation list with label chip
+- Edit: opens LabelPopup for label change, then accepts
+- Reject: removes suggestion from canvas
+- Confidence slider: dynamically shows/hides suggestions
+- Custom prompt: collapsible textarea overrides default detection prompt
+- Save: accepted annotations serialized with `createdBy: "ai-accepted"` and `confidence`
+- Image navigation: clears all suggestions
+- No JavaScript console errors
 
 ## Phase 4: Structured Storage + Lakebase - NOT STARTED
 
