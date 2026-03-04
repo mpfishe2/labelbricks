@@ -11,6 +11,7 @@ import { Sidebar } from './sidebar.js';
 import { VolumeBrowser } from './volume-browser.js';
 import { UndoManager } from './undo-manager.js';
 import { LabelPopup } from './label-popup.js';
+import { AISuggestManager } from './ai-suggest.js';
 
 class LabelBricksApp {
   constructor() {
@@ -22,6 +23,7 @@ class LabelBricksApp {
     this.undoManager = null; // Initialized after canvas
     this.toolManager = null; // Initialized after canvas
     this.labelPopup = new LabelPopup('canvas-wrapper');
+    this.aiSuggest = new AISuggestManager(this);
 
     this.currentFiles = [];
     this.currentIndex = -1;
@@ -49,6 +51,7 @@ class LabelBricksApp {
     this.labelManager.init();
     this.sidebar.init();
     this.volumeBrowser.init();
+    this.aiSuggest.init();
 
     // Show label popup when user selects an existing annotation
     canvas.on('selection:created', (e) => this._onSelectionChanged(e));
@@ -104,6 +107,7 @@ class LabelBricksApp {
     this.annotationStore.clear();
     this.undoManager.reset();
     this.canvasManager.clearAnnotations();
+    this.aiSuggest.clearSuggestions();
 
     // Load image
     const imageUrl = API.getImageUrl(filePath);

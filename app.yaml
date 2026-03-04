@@ -7,3 +7,5 @@ command:
 env:
   - name: VOLUME_PATH
     valueFrom: labelbricks-volume
+  - name: VISION_MODEL_ENDPOINT
+    value: databricks-claude-sonnet-4-5

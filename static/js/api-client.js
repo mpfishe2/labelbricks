@@ -63,6 +63,19 @@ const API = {
     if (!res.ok) throw new Error(`Save failed (${res.status})`);
     return res.json();
   },
+
+  async getAISuggestions({ filePath, prompt }) {
+    const res = await fetch('/api/ai-suggest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath, prompt }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'AI request failed' }));
+      throw new Error(err.error || `AI suggest failed (${res.status})`);
+    }
+    return res.json();
+  },
 };
 
 export default API;
