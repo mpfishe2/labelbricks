@@ -48,11 +48,27 @@ labelbricks/
 ├── libraries/
 │   └── volumes.py                # VolumeClient - UC Volume file operations
 ├── templates/
-│   ├── index.html                # Main annotation UI (Fabric.js canvas)
-│   └── set_volume.html           # Volume picker form
+│   ├── index.html                # Main annotation UI (three-panel Fabric.js canvas)
+│   └── set_volume.html           # Styled landing page
 ├── static/
-│   ├── style.css                 # Dark-themed UI styles
-│   ├── js/script.js              # Canvas logic, fetch/save annotations
+│   ├── style.css                 # Databricks-aligned design system (CSS custom properties)
+│   ├── js/
+│   │   ├── app.js                # Main entry point — LabelBricksApp orchestrator
+│   │   ├── api-client.js         # Centralized fetch wrapper for backend APIs
+│   │   ├── canvas-manager.js     # Fabric.js canvas lifecycle + image loading
+│   │   ├── tool-manager.js       # Tool state machine + keyboard shortcuts
+│   │   ├── annotation-store.js   # In-memory annotation model + JSON serialization
+│   │   ├── label-manager.js      # Label class input + color palette + recent chips
+│   │   ├── label-popup.js        # Floating popup for post-draw labeling
+│   │   ├── sidebar.js            # Image queue + lazy thumbnails + status badges
+│   │   ├── volume-browser.js     # Cascading catalog→schema→volume→directory modal
+│   │   ├── undo-manager.js       # Snapshot-based undo/redo (Ctrl+Z/Y)
+│   │   └── tools/
+│   │       ├── select.js         # Select/move tool
+│   │       ├── rectangle.js      # Rectangle draw tool
+│   │       ├── circle.js         # Ellipse draw tool
+│   │       ├── polygon.js        # Click-to-add-vertices polygon tool
+│   │       └── freehand.js       # Freehand drawing tool
 │   ├── images/                   # App logos and assets
 │   └── test/images/              # Sample images for testing
 └── .claude/
@@ -102,7 +118,7 @@ See `PROJECT_PLAN.md` for the full 4-phase plan. See `PROGRESS.md` for current s
 
 **Phase 1 (COMPLETE):** Backend modernization — OAuth auth, DABs deployment manifest, logging, type hints, snake_case methods, zero .env dependency.
 
-**Phase 2 (NEXT):** UI overhaul — Databricks-aligned theme, three-panel layout, catalog/schema/volume browser, rectangle/circle/polygon/freehand annotation tools, label classes, modular ES6 JavaScript.
+**Phase 2 (COMPLETE):** UI overhaul — Databricks-aligned theme, three-panel layout, catalog/schema/volume browser, rectangle/circle/polygon/freehand annotation tools, label classes, modular ES6 JavaScript. Post-deploy fixes: label popup, save reliability, directory pre-creation.
 
 **Phase 3:** AI-assisted labeling — FMAPI vision model integration, on-demand suggestions, accept/reject/edit workflow.
 
@@ -111,19 +127,23 @@ See `PROJECT_PLAN.md` for the full 4-phase plan. See `PROGRESS.md` for current s
 ## Code Style
 
 - Python: Follow PEP 8. Use type hints on all function signatures. Prefer `logging` over `print()`.
-- JavaScript: ES6+. No build step - vanilla JS loaded via script tags.
+- JavaScript: ES6+ modules. No build step — loaded via `<script type="module">`. 15 files in `static/js/`.
 - HTML/CSS: Minimal templating with Jinja2. Dark theme. Mobile-responsive where practical.
 - Error handling: Always wrap Databricks SDK calls in try/except. Log the error and return a user-friendly message. Never expose stack traces to the frontend.
 - Environment detection: Use `IS_DEPLOYED = os.getenv("DATABRICKS_APP_NAME") is not None`. Do not check for .env file existence.
 
-## Current Patterns (Post Phase 1)
+## Current Patterns (Post Phase 2)
 
 - `WorkspaceClient()` is initialized once globally — auto-detects CLI profile (local) or SP OAuth (deployed).
 - `get_user_info()` returns user identity from `X-Forwarded-*` headers (deployed) or `w.current_user.me()` (local, cached after first call).
-- `get_volume_client()` returns a `VolumeClient` from the Flask session's `volume_path`. Set when the user submits the volume picker form.
-- VolumeClient methods use snake_case: `list_files()`, `make_dir()`, `upload_file()`, `download_file()`, `upload_bytes()`, `download_bytes()`.
-- The VolumeClient is the sole interface for UC Volume file operations. Do not call `w.files.*` directly from app.py.
-- Fabric.js canvas is initialized in `static/js/script.js` via `initCanvas()` called on body onload. All drawing tools, image loading, and save logic live there.
+- **Volume path is tracked on the frontend** (`LabelBricksApp.volumePath`) and passed in every API call. Flask session is a fallback only — do not rely on it for deployed apps.
+- `_ensure_volume_dirs(volume_path)` pre-creates `.labelbricks/annotations/` and `.labelbricks/composites/` directories before first upload. Uses in-memory `_dirs_created` set.
+- `app.py` calls `w.files.*` directly (Phase 2 simplified away VolumeClient for streaming endpoints).
+- Frontend is 15 ES6 modules loaded via `<script type="module">` from `static/js/app.js` entry point. No build step.
+- Fabric.js v4.6.0 canvas managed by `CanvasManager`. Background image set via `setBackgroundImage` (non-selectable).
+- Tool state machine in `ToolManager` — 5 tools (select, rectangle, circle, polygon, freehand) with keyboard shortcuts 1-5.
+- `LabelPopup` shows after drawing or selecting annotations for post-draw labeling.
+- Save has retry logic (3 attempts, 1s delay) and a saving overlay modal to prevent multi-clicks.
 
 ## Lessons Learned
 
@@ -131,3 +151,7 @@ See `PROJECT_PLAN.md` for the full 4-phase plan. See `PROGRESS.md` for current s
 - **`WorkspaceClient()` credential resolution**: Direct params > env vars (`DATABRICKS_HOST`, `DATABRICKS_TOKEN`) > CLI profile. If DEFAULT profile is broken, set `DATABRICKS_CONFIG_PROFILE` in the shell.
 - **Don't add `.env` loading for local dev** — it creates a false dependency. CLI profile + SDK `current_user.me()` + UI-selected volume covers all needs.
 - **`uv run --env-file .env`** is available if env vars are ever needed, but the app itself should not depend on `.env`.
+- **Flask session is unreliable in deployed Databricks Apps.** The `app.secret_key = os.urandom()` changes on restart, and Gunicorn workers may not share session state. Always pass critical context (like `volumePath`) from the frontend in request bodies/query params, with session as fallback only.
+- **Pre-create Volume directories before upload.** `w.files.upload()` does not auto-create parent directories. Use `w.files.create_directory()` wrapped in try/except (idempotent — succeeds if already exists).
+- **Draw-then-label is the natural annotation UX.** Users draw a shape first, then want to label it. A floating label popup near the annotation (with recent label chips) is the right pattern. Do not require label selection before drawing.
+- **Deployment two-step:** `databricks bundle deploy --target fevm` uploads source code, then `databricks apps deploy labelbricks-fevm --source-code-path ...` triggers the app restart. Both steps are needed.
