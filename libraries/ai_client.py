@@ -62,6 +62,11 @@ def get_ai_suggestions(
     model_name = model or DEFAULT_MODEL
     prompt_text = custom_prompt or DEFAULT_PROMPT
 
+    # FMAPI Claude endpoint only accepts image/png — convert if needed
+    if content_type != "image/png":
+        image_bytes, content_type = _convert_to_png(image_bytes)
+        logger.info("Converted image to PNG (%d bytes) for AI request", len(image_bytes))
+
     # Compress large images to stay under FMAPI request size limits (~4MB)
     MAX_IMAGE_BYTES = 2_500_000  # Leave room for base64 overhead + prompt
     if len(image_bytes) > MAX_IMAGE_BYTES:
@@ -169,10 +174,22 @@ def _validate_suggestions(suggestions: list[dict]) -> list[dict]:
     return valid
 
 
-def _compress_image(image_bytes: bytes, max_bytes: int) -> tuple[bytes, str]:
-    """Resize and compress an image to fit within max_bytes. Returns (bytes, content_type)."""
+def _convert_to_png(image_bytes: bytes) -> tuple[bytes, str]:
+    """Convert any image format to PNG. Returns (bytes, content_type)."""
     img = Image.open(BytesIO(image_bytes))
     if img.mode == "RGBA":
+        pass  # PNG supports RGBA natively
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue(), "image/png"
+
+
+def _compress_image(image_bytes: bytes, max_bytes: int) -> tuple[bytes, str]:
+    """Resize and compress an image to fit within max_bytes as PNG. Returns (bytes, content_type)."""
+    img = Image.open(BytesIO(image_bytes))
+    if img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGB")
 
     # Try progressively smaller sizes until under the limit
@@ -181,14 +198,13 @@ def _compress_image(image_bytes: bytes, max_bytes: int) -> tuple[bytes, str]:
         new_h = int(img.height * scale)
         resized = img.resize((new_w, new_h), Image.LANCZOS)
 
-        for quality in [85, 70, 50]:
-            buf = BytesIO()
-            resized.save(buf, format="JPEG", quality=quality)
-            if buf.tell() <= max_bytes:
-                return buf.getvalue(), "image/jpeg"
+        buf = BytesIO()
+        resized.save(buf, format="PNG")
+        if buf.tell() <= max_bytes:
+            return buf.getvalue(), "image/png"
 
     # Last resort: very small
     resized = img.resize((640, int(640 * img.height / img.width)), Image.LANCZOS)
     buf = BytesIO()
-    resized.save(buf, format="JPEG", quality=50)
-    return buf.getvalue(), "image/jpeg"
+    resized.save(buf, format="PNG")
+    return buf.getvalue(), "image/png"
